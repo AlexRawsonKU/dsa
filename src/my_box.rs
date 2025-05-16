@@ -4,7 +4,7 @@
 //! and contains no functionality beyond storing a single value (a number, in the tests).
 //! For this implementation, it has been expanded to cover all reasonable `T`.
 
-use core::fmt;
+use core::{fmt, ops::Deref};
 
 pub use implementation::MyBox;
 
@@ -16,6 +16,7 @@ mod implementation {
     /// Simple heap allocation of a single value.
     ///
     /// Like [`alloc::boxed::Box`], this type stores a single `T` on the heap.
+    #[doc(alias = "MyNumber")]
     pub struct MyBox<T> {
         // critical invariant: `inner` must be a valid pointer to a valid T, and if T is not zero-sized it must be possible to dealloc it
         inner: NonNull<T>,
@@ -79,7 +80,9 @@ mod implementation {
         }
     }
 
+    /// Translation of requirement to be able to read the value.
     impl<T> AsRef<T> for MyBox<T> {
+        #[doc(alias = "read")]
         #[inline]
         fn as_ref(&self) -> &T {
             // SAFETY: `inner` is always valid as a reference to a T
@@ -87,7 +90,9 @@ mod implementation {
         }
     }
 
+    /// Translation of requirement to be able to overwrite the value.
     impl<T> AsMut<T> for MyBox<T> {
+        #[doc(alias = "write")]
         #[inline]
         fn as_mut(&mut self) -> &mut T {
             // SAFETY: `inner` is valid as a reference to a T, and the caller has an exclusive reference to this `MyBox<T>`
@@ -95,6 +100,7 @@ mod implementation {
         }
     }
 
+    /// Translation of destructor.
     impl<T> Drop for MyBox<T> {
         #[inline]
         fn drop(&mut self) {
@@ -115,11 +121,19 @@ mod implementation {
     }
 }
 
+/// Rust-specific helper to visualize this type in a programmer-friendly way.
 impl<T: fmt::Debug> fmt::Debug for MyBox<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("MyBox")
             .field(AsRef::<T>::as_ref(self))
             .finish()
+    }
+}
+
+/// Translation of the copy constructor into Rust.
+impl<T: Clone> Clone for MyBox<T> {
+    fn clone(&self) -> Self {
+        Self::new(self.as_ref().clone())
     }
 }
 
