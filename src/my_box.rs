@@ -4,14 +4,19 @@
 //! and contains no functionality beyond storing a single value (a number, in the tests).
 //! For this implementation, it has been expanded to cover all reasonable `T`.
 
-use core::{fmt, ops::Deref};
+use core::fmt;
 
 pub use implementation::MyBox;
 
 /// Unsafe-restraining module.
 #[allow(unsafe_code)]
 mod implementation {
-    use core::{alloc::Layout, mem::ManuallyDrop, ptr::NonNull};
+    use core::{
+        alloc::Layout,
+        mem::ManuallyDrop,
+        ops::{Deref, DerefMut},
+        ptr::NonNull,
+    };
 
     /// Simple heap allocation of a single value.
     ///
@@ -81,20 +86,22 @@ mod implementation {
     }
 
     /// Translation of requirement to be able to read the value.
-    impl<T> AsRef<T> for MyBox<T> {
+    impl<T> Deref for MyBox<T> {
+        type Target = T;
+
         #[doc(alias = "read")]
         #[inline]
-        fn as_ref(&self) -> &T {
+        fn deref(&self) -> &T {
             // SAFETY: `inner` is always valid as a reference to a T
             unsafe { self.inner.as_ref() }
         }
     }
 
     /// Translation of requirement to be able to overwrite the value.
-    impl<T> AsMut<T> for MyBox<T> {
+    impl<T> DerefMut for MyBox<T> {
         #[doc(alias = "write")]
         #[inline]
-        fn as_mut(&mut self) -> &mut T {
+        fn deref_mut(&mut self) -> &mut T {
             // SAFETY: `inner` is valid as a reference to a T, and the caller has an exclusive reference to this `MyBox<T>`
             unsafe { self.inner.as_mut() }
         }
@@ -124,16 +131,14 @@ mod implementation {
 /// Rust-specific helper to visualize this type in a programmer-friendly way.
 impl<T: fmt::Debug> fmt::Debug for MyBox<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("MyBox")
-            .field(AsRef::<T>::as_ref(self))
-            .finish()
+        f.debug_tuple("MyBox").field(self as &T).finish()
     }
 }
 
 /// Translation of the copy constructor into Rust.
 impl<T: Clone> Clone for MyBox<T> {
     fn clone(&self) -> Self {
-        Self::new(self.as_ref().clone())
+        Self::new(T::clone(self))
     }
 }
 
@@ -145,7 +150,7 @@ mod tests {
     fn store_numbers() {
         for i in [1, 2, 3] {
             let boxed: MyBox<i32> = MyBox::new(i);
-            std::println!("my box stores {n}", n = boxed.as_ref());
+            std::println!("my box stores {n}", n = *boxed);
         }
     }
 
@@ -162,7 +167,7 @@ mod tests {
     fn store_unit_into_inner() {
         // make sure we can handle zero-sized types correctly
         let boxed: MyBox<()> = MyBox::new(());
-        std::println!("the box contains {unit:?}", unit = boxed.as_ref());
+        std::println!("the box contains {unit:?}", unit = *boxed);
         std::println!("the box unwraps into {unit:?}", unit = boxed.into_inner());
     }
 
@@ -170,7 +175,7 @@ mod tests {
     fn store_unit_drop() {
         // make sure we can handle zero-sized types correctly
         let boxed: MyBox<()> = MyBox::new(());
-        std::println!("the box contains {unit:?}", unit = boxed.as_ref());
+        std::println!("the box contains {unit:?}", unit = *boxed);
         core::mem::drop(boxed);
         // should not double-free
     }
